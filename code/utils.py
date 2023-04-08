@@ -183,11 +183,10 @@ def get_train_val_split(train, ratio: float = 0.3, random_state: int = 5) -> tup
     train, test: tuple of the training and testing data
     """
     
-    TEST_SIZE = 0.3
     building_meter_df = train.groupby(["building_id", "meter"])\
                             .agg(avg_meter_reading=("log_meter_reading", np.mean))\
                             .drop("avg_meter_reading", axis=1).reset_index()
-    building_meter_train_df, building_meter_test_df = train_test_split(building_meter_df, test_size=TEST_SIZE, random_state=random_state)
+    building_meter_train_df, building_meter_test_df = train_test_split(building_meter_df, test_size=ratio, random_state=random_state)
     
     train_df = train.merge(building_meter_train_df, on=["building_id","meter"], how="inner")
     val_df = train.merge(building_meter_test_df, on=["building_id","meter"], how="inner")
