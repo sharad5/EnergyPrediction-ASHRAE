@@ -108,6 +108,22 @@ def weather_data_parser(weather_data):
 
     return weather_data
 
+def add_lag_feature(weather_df, window=3):
+    """Adds Lag variables to weather data"""
+    group_df = weather_df.groupby('site_id')
+    cols = ['air_temperature', 'cloud_coverage', 'dew_temperature', 'precip_depth_1_hr', 'sea_level_pressure', 'wind_direction', 'wind_speed']
+    rolled = group_df[cols].rolling(window=window, min_periods=0)
+    lag_mean = rolled.mean().fillna(method ='bfill').reset_index()
+    lag_max = rolled.max().fillna(method ='bfill').reset_index()
+    lag_min = rolled.min().fillna(method ='bfill').reset_index()
+    lag_std = rolled.std().fillna(method ='bfill').reset_index()
+    for col in cols:
+        weather_df[f'{col}_mean_lag{window}'] = lag_mean[col].astype(np.float16)
+        weather_df[f'{col}_max_lag{window}'] = lag_max[col].astype(np.float16)
+        weather_df[f'{col}_min_lag{window}'] = lag_min[col].astype(np.float16)
+        weather_df[f'{col}_std_lag{window}'] = lag_std[col].astype(np.float16)
+    return weather_df
+
 def load_data(path: str) -> dict:
     """Loads data and returns data in the form of a tuple. Also 
     performs basic feature engineering 
@@ -126,6 +142,7 @@ def load_data(path: str) -> dict:
     weather_train = pd.read_csv(os.path.join(path, 'weather_train.csv'))
     weather_train['timestamp'] = pd.to_datetime(weather_train['timestamp'], infer_datetime_format = True, utc = True).astype('datetime64[ns]')
     weather_train = optimize_df_mem_usage(weather_train)
+    weather_train = add_lag_feature(weather_train, window=7)
     
     weather_test = pd.read_csv(os.path.join(path, 'weather_test.csv'))
     weather_test = optimize_df_mem_usage(weather_test)
@@ -170,6 +187,12 @@ def load_data(path: str) -> dict:
         "y_train": train['log_meter_reading'],
 #         "y_test": test['log_meter_reading'],
     }
+
+def get_stratified_splitter(X, y, random_state: int = 5) -> tuple:
+    discretized_target = np.digitize(y, bins = np.linspace(0, y.max(), 30))
+    sgkf = StratifiedGroupKFold(n_splits=4)
+    sgkf_gen = sgkf.split(X, discretized_target, X["building_id"].astype(str) + "_" + X["meter"].astype(str))
+    return sgkf_gen
 
 def get_train_val_split(train, ratio: float = 0.3, random_state: int = 5) -> tuple:
     """Returns the training and validation set from all the training data 
